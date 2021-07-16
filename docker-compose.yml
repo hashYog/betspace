@@ -1,0 +1,115 @@
+version: "3"
+services:
+    betplace-nginx:
+        build:
+            context: ./.docker/development
+            dockerfile: nginx.docker
+        container_name: betplace-nginx
+        volumes:
+            - "$PWD/app:/var/www/app:rw"
+        environment:
+            VIRTUAL_HOST: "betplace"
+            PHP_IDE_CONFIG: "serverName=Docker"
+        depends_on:
+            - betplace-php-fpm
+        ports:
+            - 8088:80
+        networks:
+            - betplace-network
+    betplace-php-fpm:
+        build:
+            context: ./.docker/development
+            dockerfile: php-fpm.docker
+        container_name: betplace-php-fpm
+        volumes:
+            - "$PWD/app:/var/www/app:rw"
+        environment:
+            XDEBUG_CONFIG: "remote_host=192.168.22.1 remote_enable=1"
+            PHP_IDE_CONFIG: "serverName=Docker"
+        depends_on:
+            - betplace-mysql
+            - betplace-redis
+        networks:
+            - betplace-network
+    betplace-php-cli:
+        build:
+            context: ./.docker/development
+            dockerfile: php-cli.docker
+        container_name: betplace-php-cli
+        volumes:
+            - "$PWD/app:/var/www/app:rw"
+            - "$PWD/.data/composer:/root/.composer/cache"
+        environment:
+            XDEBUG_CONFIG: "remote_host=192.168.22.1 remote_enable=1"
+            PHP_IDE_CONFIG: "serverName=Docker"
+        depends_on:
+            - betplace-mysql
+            - betplace-redis
+        networks:
+            - betplace-network
+    betplace-mysql:
+        image: mysql:8
+        container_name: betplace-mysql
+        volumes:
+            - "$PWD/.data/db/mysql8:/var/lib/mysql"
+        environment:
+            MYSQL_ROOT_PASSWORD: root
+            MYSQL_USER: user
+            MYSQL_PASSWORD: password
+            MYSQL_DATABASE: db
+        ports:
+            - 33066:3306
+        networks:
+            - betplace-network
+    betplace-storage:
+        container_name: betplace-storage
+        build:
+            context: ./storage/docker/development
+            dockerfile: nginx.docker
+        volumes:
+            - ./storage:/app
+        ports:
+            - "8888:80"
+        networks:
+            - betplace-network
+    betplace-ftp:
+        container_name: betplace-storage-ftp
+        image: stilliard/pure-ftpd
+        environment:
+            FTP_USER_NAME: user
+            FTP_USER_PASS: password
+            FTP_USER_HOME: /app
+        volumes:
+            - ./storage/public:/app
+        networks:
+            - betplace-network
+    betplace-rabbitmq:
+        image: rabbitmq:3-management
+        environment:
+            RABBITMQ_ERLANG_COOKIE: SWQOKODSQALRPCLNMEQG
+            RABBITMQ_DEFAULT_USER: rabbit
+            RABBITMQ_DEFAULT_PASS: rabbit
+        ports:
+            - "15682:15672"
+            - "56722:5672"
+        volumes:
+            - ".docker/development/rabbit/enabled_plugins:/etc/rabbitmq/enabled_plugins"
+        networks:
+            - betplace-network
+    betplace-redis:
+        image: redis:6.0-alpine
+        container_name: betplace-redis
+        volumes:
+            - "$PWD/.data/redis:/data"
+        networks:
+            - betplace-network
+        command:
+            - 'redis-server'
+
+networks:
+    betplace-network:
+        driver: bridge
+        ipam:
+            driver: default
+            config:
+                - subnet: 192.168.21.0/24
